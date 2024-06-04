@@ -1,0 +1,38 @@
+/* Active and inactive tabs */
+.nav-tabs>li>a {
+    background-color: blue;
+    color: white;
+    font-weight: bold; /* Make text bold */
+    padding: 10px 15px; /* Adjust padding for larger tabs */
+    margin-right: 5px; /* Add some spacing between tabs */
+    border: 1px solid black; /* Add border to all tabs */
+}
+
+/* Active tab */
+.nav-tabs>li.active>a,
+.nav-tabs>li.active>a:focus,
+.nav-tabs>li.active>a:hover {
+    background-color: red;
+    color: yellow;
+}
+
+/* Tab bar */
+.nav-tabs {
+    border-bottom: 2px solid grey; /* Add a thicker border to the bottom of the tab bar */
+}
+
+/* Page change bar */
+.navbar {
+    background-color: blue; /* Change background color of the page change bar to orange */
+    border: none; /* Remove border from the page change bar */
+    padding: 5px 10px; /* Adjust padding for the page change bar */
+    margin-bottom: 10px; /* Add some space between the page change bar and content */
+    border-radius: 5px; /* Add rounded corners to the page change bar */
+    height: 30px; /* Reduce the height of the page change bar */
+}
+
+/* Page buttons */
+.navbar-nav>li>a {
+    padding: 0 5px; /* Adjust padding for the page buttons */
+    line-height: 20px; /* Align text vertically within buttons */
+}

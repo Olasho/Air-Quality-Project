@@ -1,0 +1,603 @@
+---
+title: "School Street Intervention"
+author: "Olasho"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    css: /Users/olasho/Desktop/R language2/style.css
+    toc: true
+    highlight: espresso
+    theme: cerulean
+    number_sections: true
+---
+
+# Introduction
+
+In urban areas, efforts to improve air quality often involve creative solutions, such as implementing "school streets" to reduce pollution around schools. This analysis aims to measure the impact of such interventions on air quality by examining changes in pollutant levels during designated intervention periods. Data from twelve schools across eleven wards in Bradford have been collected, focusing on pollutants like Nitric Oxide (NO), Nitrogen Dioxide (NO<sub>2</sub>), Ozone (O<sub>3</sub>), PM1, PM<sub>10</sub>, and PM<sub>2.5</sub>.
+
+The study initially covers a three-month period, starting from June 8th, 2023, to September 20th, 2023, during which the school street initiative was implemented. This initiative aims to reduce pollution during two key times: the morning drop-off and afternoon pick-up periods. Based on similar programs in London and insights from a local study, the intervention times have been estimated to be from 7:45 AM to 9:15 AM for drop-offs and from 2:30 PM to 4:30 PM for pick-ups, with the intention of refining these times as the data is analyzed.
+
+The analysis is approached from three angles: descriptive, time series, and spatial analyses. Descriptively, a thorough overview of each pollutant's concentration across all schools will be provided, using common statistical measures like averages, medians, and ranges.
+
+Next, the time aspect will be explored, examining how pollutant levels change over the three-month period. Statistical tests will be employed to determine if there are significant differences in pollutant concentrations between intervention and non-intervention periods.
+
+Finally, spatial variations in air quality will be explored by using interpolation techniques to estimate pollutant concentrations in areas where direct data collection was not possible. By combining these methods, insights can be gained to guide future efforts to improve air quality in urban environments.
+
+# Document specification
+
+```{r}
+knitr::opts_chunk$set(comment = " ", warning = FALSE, message = "FALSE")
+
+options(knitr.table.format = "html") 
+```
+
+# Loading and cleaning the datasets
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+## install.packages("gridExtra")
+library(tidyverse)
+library(sf)
+library(kableExtra)
+library(stringr)
+library(htmlTable)
+library(tableone)
+library(tmap)
+library(paletteer)
+library(ggthemes)
+library(readxl)
+library(Hmisc)
+library(stringr)
+library(paletteer)
+library(gridExtra)
+library(grid)
+library(htmltools)
+
+# loading all the school street datasets
+
+street_apperley <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Apperley Bridge Marina Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_cavendish <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Cavendish Prim Sch Hall Rd Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_EastBowling <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford East Bowling Flockton Grove Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_Fairfield <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Farfield Prim Sch Reevy Cres Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_Girlington <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Girlington St Leonards Road Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_GT_Horton <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Gt Horton All Saints Prim Sch Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_Horton <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Horton Aberdeen Place Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_Ilkley <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Ilkley Grove Road Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_Keighley <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Keighley Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_low_moor <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Low Moor First Street Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_saltaire <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Saltaire Titus Street Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+street_silsden <- readxl::read_xlsx("/Users/olasho/Desktop/R language2/My projects/Air Quality Project/input_Data/Bradford Silsden Hothfield Street Zephyr 15-Minute Means Mass units 8 June to 20 September 2023.xlsx", skip = 3, col_names = TRUE)
+
+
+# Ensuring the dates are in UTC
+
+head(street_apperley$Date) 
+
+# Checking for number of empty rows
+
+sum(!complete.cases(street_apperley$`Nitric Oxide µg m-3 (20'C 1013mb)`))
+
+# Creating a function to get rid of empty cells by row
+
+remove_missing_roW <-  function(df, lower_empty_value, higher_empty_value) {
+  
+  missing_cells <- vector("numeric", length = nrow(df)) # create empty vector
+  
+  for (i in 1:nrow(df)) {
+    missing_cells[i] <- sum(is.na(df[i, ]))                # fill empty vector with number of missing cells per row
+  }
+  
+  df_1 <- df %>%
+    mutate(number_of_empty_cells = missing_cells)        # create a new column for the number of empty cells
+  
+  df_2 <- df_1 %>%
+    filter(!(number_of_empty_cells >= lower_empty_value & number_of_empty_cells <= higher_empty_value))          # this filters out the rows with the specified number of empty cells
+
+  df_3 <- subset(df_2, select = -number_of_empty_cells)   # removing the column for number of emtpy cells
+  
+  return(df_3)                                            # returning the dataframe 
+}
+
+# Applying the funtion to all the datasets to get rid of rows with more than 8 empty cells
+
+street_apperley <- remove_missing_roW(street_apperley, 8, 9)
+
+street_cavendish <- remove_missing_roW(street_cavendish, 8, 9)
+
+street_EastBowling <- remove_missing_roW(street_EastBowling, 8, 9)
+
+street_Fairfield <- remove_missing_roW(street_Fairfield, 8, 9)
+
+street_Girlington <- remove_missing_roW(street_Girlington, 8, 9)
+
+street_GT_Horton <- remove_missing_roW(street_Horton, 8, 9)
+
+street_Horton <- remove_missing_roW(street_Horton, 8, 9)
+
+street_Ilkley <- remove_missing_roW(street_Ilkley, 8, 9)
+
+street_Keighley <- remove_missing_roW(street_Keighley, 8, 9)
+
+street_low_moor <- remove_missing_roW(street_low_moor, 8, 9)
+
+street_saltaire <- remove_missing_roW(street_saltaire, 8, 9)
+
+street_silsden <- remove_missing_roW(street_silsden, 8, 9)
+
+# Adding the school street name to each dataset in separate columns
+
+street_apperley$Sites <- "Apperley Bridge marina"
+
+street_cavendish$Sites <- "Cavendish Prim Sch Hall Rd"
+
+street_EastBowling$Sites <- "East Bowling Flockton Grove"
+
+street_Fairfield$Sites <- "Farfield PRim Sch Reevy"
+
+street_Girlington$Sites <- "Girlington St Leonards Road"
+
+street_GT_Horton$Sites <- "Gt Horton All Saints Primary School"
+
+street_Horton$Sites <- "Horton Aberdeen Place"
+
+street_Ilkley$Sites <- "Ilkley Grove Road"
+
+street_Keighley$Sites <- "Keighley"
+
+street_low_moor$Sites <- "Low Moor First"
+
+street_saltaire$Sites <- "Saltaire Titus"
+
+street_silsden$Sites <- "Silsden Hothfield"
+
+# Adding the school street ward to each dataset in separate columns
+
+street_apperley$Ward <- "Idle and Thackley"
+
+street_cavendish$Ward <- "Eccleshill"
+
+street_EastBowling$Ward <- "Bowling and Barkerend"
+
+street_Fairfield$Ward <- "Wibsey"
+
+street_Girlington$Ward <- "Toller"
+
+street_GT_Horton$Ward <- "Great Horton"
+
+street_Horton$Ward <- "Great Horton"
+
+street_Ilkley$Ward <- "Ilkley"
+
+street_Keighley$Ward <- "Keighley West"
+
+street_low_moor$Ward <- "Wyke"
+
+street_saltaire$Ward <- "Shipley"
+
+street_silsden$Ward <- "Craven"
+
+# Adding the 2022 ward code for each ward
+
+street_apperley$Ward_code <- "E05001353"
+
+street_cavendish$Ward_code <- "E05001350"
+
+street_EastBowling$Ward_code <- "E05001345"
+
+street_Fairfield$Ward_code <- "E05001367"
+
+street_Girlington$Ward_code <- "E05001364"
+
+street_GT_Horton$Ward_code <- "E05001351"
+
+street_Horton$Ward_code <- "E05001351"
+
+street_Ilkley$Ward_code <- "E05001354"
+
+street_Keighley$Ward_code <- "E05001357"
+
+street_low_moor$Ward_code <- "E05001370"
+
+street_saltaire$Ward_code <- "E05001362"
+
+street_silsden$Ward_code <- "E05001349"
+
+# Joining all the school streets together
+
+street_all_sites <- rbind(street_apperley, street_cavendish, street_EastBowling, street_Fairfield, street_Girlington, street_GT_Horton, street_Horton, street_Ilkley, street_Keighley, street_low_moor, street_saltaire, street_silsden)
+
+# Reordering the variables so the ward code, ward, and school street come first
+
+street_all_school <- street_all_sites %>%
+  select(Ward_code, Ward, Sites, everything())
+
+# Filling the month column with the appropriate month
+
+street_all_sites <- street_all_sites
+
+street_all_sites$Date <- as.character(street_all_sites$Date) # converting date from POSIXct to character
+
+street_all_sites$Month <- ifelse(str_detect(street_all_sites$Date, "06"), "June", ifelse(str_detect(street_all_sites$Date, "07"), "July", ifelse(str_detect(street_all_sites$Date, "08"), "August", ifelse(str_detect(street_all_sites$Date, "09"), "September", "others"))))
+
+# convertign the date back to GMT
+
+street_all_sites$Date <- ymd(street_all_sites$Date, tz = "GMT")
+
+# Separating the date from the time
+
+street_all_sites <- separate(street_all_sites, Hour, into = c("ate", "Hour"), sep = " ") 
+
+# Removing the ate column created
+
+street_all_sites <- subset(street_all_sites, select = -ate)
+
+# Adding the day to the column
+
+street_all_sites$day <- weekdays(street_all_sites$Date)
+
+# Separating out the dataset into weekdays and weekends
+
+street_all_sites_weekday <- street_all_sites %>% 
+  filter(day %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"))
+
+street_all_sites_weekends <- street_all_sites %>%
+  filter(day %in% c("Saturday", "Sunday"))
+```
+
+# Summary of Air pollutants
+
+This section presents an analysis focused on determining key summary statistics for various air pollutants. The goal is to identify the mean, standard deviation, minimum, and maximum values of each pollutant. Furthermore, we aim to characterize the average pollutant concentrations for each individual school, offering valuable insights into the distribution of pollutants within our study area. 
+
+```{r}
+street_all_sites_3 <- street_all_sites_weekday
+
+# Renaming the columns
+
+street_new_column_names <- c("Date", "Month", "Hour", "Temperature \u00B0C", "Atmospheric Pressure", "NO\u2082", "NO", "O\u2083", "PM1", "PM10", "PM2.5", "School street", "Ward", "Ward-Code", "Day")
+
+names(street_all_sites_3) <- street_new_column_names
+
+# Summary table showing the mean of pollutants by each school street; This was carried out individually for each school street because they have varying number of missing values.
+
+## First a function will be created to find the mean of each pollutant for each school street
+
+Street_summary <- function(df, street) {
+street_all_sites_3 %>%
+  group_by(`School street`) %>%
+  filter(`School street` == street) %>%
+  summarise(mean_NO = mean(NO, na.rm = TRUE),
+            mean_NO2 = mean(`NO₂`, na.rm = TRUE),
+            mean_O3 = mean(`O₃`, na.rm = TRUE),
+            mean_PM1 = mean(PM1, na.rm = TRUE),
+            mean_PM10 = mean(PM10, na.rm = TRUE),
+            mean_PM25 = mean(`PM2.5`, na.rm = TRUE),
+            )
+}
+
+## Apperley Bridge marina
+
+street_summary_A <- Street_summary(street_all_sites_3, "Apperley Bridge marina")
+
+## Cavendish
+
+street_summary_B <- Street_summary(street_all_sites_3, "Cavendish Prim Sch Hall Rd")
+
+## East Bowling
+
+street_summary_C <- Street_summary(street_all_sites_3, "East Bowling Flockton Grove")
+
+## Farfield
+
+street_summary_D <- Street_summary(street_all_sites_3, "Farfield PRim Sch Reevy")
+
+## Girlington
+
+street_summary_E <- Street_summary(street_all_sites_3, "Girlington St Leonards Road")
+
+## "Gt Horton All Saints Primary School"
+
+street_summary_F <- Street_summary(street_all_sites_3, "Gt Horton All Saints Primary School")
+
+## "Horton Aberdeen Place"
+
+street_summary_G <- Street_summary(street_all_sites_3, "Horton Aberdeen Place")
+
+## "Ilkley Grove Road"
+
+street_summary_H <- Street_summary(street_all_sites_3, "Ilkley Grove Road")
+
+## "Keighley"
+
+street_summary_I <- Street_summary(street_all_sites_3, "Keighley")
+
+## "Low Moor First" 
+
+street_summary_J <- Street_summary(street_all_sites_3, "Low Moor First")
+
+## "Saltaire Titus" 
+
+street_summary_K <- Street_summary(street_all_sites_3, "Saltaire Titus")
+
+## "Silsden Hothfield" 
+
+street_summary_L <- Street_summary(street_all_sites_3, "Silsden Hothfield")
+
+## Joining the streets together in one table
+
+street_summary_combine <- rbind(street_summary_A, street_summary_B, street_summary_C, street_summary_D, street_summary_E, street_summary_F, street_summary_G, street_summary_H, street_summary_I, street_summary_J, street_summary_K, street_summary_L)
+
+street_summary_combine[ , 2:7] <- round(street_summary_combine[ , 2:7], 2)
+
+
+## Applying the Kable function to the dataframe
+
+street_summary_combine %>%
+  kbl(caption = "Summary table of air pollutants by school street") %>%
+  kable_paper("hover") %>%
+  kable_classic_2(full_width = F, html_font = "Cambria")
+
+# Using a cluster bar chart to give  visual representation of the mean distribution of all the pollutants by school street
+
+## First bring all the mean into one table
+
+street_summary_combine_2 <- street_summary_combine %>%
+  gather("mean_NO",	"mean_NO2",	"mean_O3",	"mean_PM1",	"mean_PM10",	"mean_PM25", key = "Pollutants", value = "Mean of pollutants")
+
+## plot the bar chart
+
+ggplot(street_summary_combine_2) +
+  geom_bar(stat = "identity", aes(x = reorder(`School street`, `Mean of pollutants`), y = `Mean of pollutants`, fill = Pollutants)) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set2")
+```
+
+# Statistical trend analysis
+
+This study employs time series analysis to investigate the influence of School Streets road closures on air quality surrounding identified schools. Due to the unavailability of pre-intervention data, establishing baseline concentrations for comparison was not feasible. Consequently, the analysis focuses on examining differences in the diurnal profile of pollutant concentrations across various monitoring sites during periods of School Streets road closures.
+
+Drawing on the methodology employed in the London School Streets Air Quality Monitoring study, the impact of interventions is assessed by comparing pollutant concentrations when School Streets were closed against times when they were not. Notably, unlike the London study, this analysis lacks monitoring sites without interventions. Therefore, comparisons are made between periods of intervention and non-intervention, providing insights into the unique air quality dynamics surrounding the participating schools.
+
+By aligning the methodology with established frameworks while adapting it to the research context, the aim is to provide valuable insights into the efficacy of School Streets interventions in mitigating air pollution. This comparative approach enhances the robustness of the findings and contributes to the growing body of literature on urban air quality management strategies. 
+
+According to the City of the Bradford Metropolitan Council, the current opening and closing time are 08:45am and 03:00pm respectively. Therefore giving ample drop off time and pickup time before and after closing time, and taking reference from the London School Streets Air quality Monitoring study and insights from a local study, the intervention times have been estimated to be from **7:45am to 9:15am** for drop-offs and from **2:30pm to 4:30pm** for pick-ups, with the intention of refining these times as the data is analyzed.
+
+Due to further investigation of each school's starting and closing time, the following school had a different School Street intervention period due to a different closing and/or opening time.
+
+1.    Cavendish Primary School; start time 7:45am
+
+## Average Diurnal Profiles of Pollutants at Each School Site during School term
+
+This analysis presents the average diurnal profiles of pollutants measured at various sites. The methodology involves averaging pollutant concentrations across timestamps, resulting in a single average concentration for each time of day. Specifically, concentrations measured at 7:15am, for instance, are aggregated to derive a representative average concentration for that time slot. This averaging process is restricted to term times, with data from half-term weeks, weekends and school breaks excluded from the analysis.
+
+To estimate term times, school term time was collected from the three schools including Cavendish Primary School, Farfield Primary School. Additionally, school termtime from All Saints CofE Primary School in GT Horton was collected. Access to term time data prior to September resumption was not always feasible. The estimated term times for schools within a one-mile radius of the school street are as follows:
+
+School opening: June 5th to July 21st
+School closed: July 24th to September 1st
+School reopened: September 5th to September 20th
+
+These estimated term times serve as the basis for the diurnal profile analysis, allowing for the identification of temporal patterns in pollutant concentrations during school term periods.
+
+```{r, fig.width=20, fig.height=50}
+
+# Filter data to include only term times from June 8th to July 21st and September 5th to September 20th in the dataset 
+
+street_term_time <- street_all_sites_3 %>%
+  filter(Date >= "2023-06-08" & Date <= "2023-07-22" | Date >= "2023-09-05" & Date <= "2023-09-21")
+
+# Here I am going to separate the hour column into two columns retaining only the column with the hour
+
+street_term_time <- street_term_time %>%
+  separate(Hour, into = c("Hour", "Minutes"), sep = ":")
+
+# Removing the minutes column 
+
+street_term_time <- subset(street_term_time, select = -Minutes)
+
+# There are missing values under hour that need to be converted to hour 23
+
+street_term_time$Hour[is.na(street_term_time$Hour)] <- 23
+
+# Group data by school and timestamp, calculate mean pollutant concentration
+
+street_term_time_2 <- street_term_time %>%
+  group_by(`School street`, Hour) %>%
+  summarise(
+    Mean_NO = mean(NO),
+    Mean_NO2 = mean(`NO₂`),
+    Mean_O3 = mean(`O₃`),
+    Mean_PM1 = mean(PM1),
+    Mean_PM10 = mean(PM10),
+    Mean_PM2.5 = mean(PM2.5)
+  )
+
+# Convert time to factor for proper ordering on x-axis
+
+street_term_time_2$Hour <- factor(street_term_time_2$Hour, levels = unique(street_term_time_2$Hour))
+
+# Gathering all the mean pollutant in one column
+
+street_term_time_2 <- street_term_time_2 %>%
+  gather("Mean_NO",	"Mean_NO2",	"Mean_O3",	"Mean_PM1",	"Mean_PM10",	"Mean_PM2.5", key = "Pollutants", value = "Mean of pollutants")
+
+# Plot average diurnal profiles for each pollutant using ggplot
+## Creating a function for all the plots
+
+ street_diurnal_plot <- function(df, Sites, Plot_title) {
+   df %>%
+  filter(`School street` == Sites) %>%
+  ggplot() +
+  geom_line(aes(x = Hour, y = `Mean of pollutants`, color = Pollutants, group = Pollutants), linetype = "dashed", size = 0.8, alpha = 10) +
+  labs(title = Plot_title, x = "Time of Day", y = "Mean Pollutant Concentration") +
+    scale_color_manual(values = c("orange", "blue", "red", "brown", "purple", "green")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.1, hjust = 0.1, size = 15), axis.text.y = element_text(size = 10), axis.title = element_text(size = 15), plot.title = element_text(size = 20), legend.text = element_text(size = 15), legend.title = element_text(size = 15))
+ }
+ 
+## Creating a plot for all the school streets
+
+## Apperley Bridge marina
+
+plot_A <- street_diurnal_plot(street_term_time_2, "Apperley Bridge marina", "Apperley Bridge marina")
+
+## Cavendish
+
+plot_B <- street_diurnal_plot(street_term_time_2, "Cavendish Prim Sch Hall Rd", "Cavendish Prim Sch Hall Rd")
+
+## East Bowling
+
+plot_C <- street_diurnal_plot(street_term_time_2, "East Bowling Flockton Grove", "East Bowling Flockton Grove")
+
+## Farfield
+
+plot_D <- street_diurnal_plot(street_term_time_2, "Farfield PRim Sch Reevy", "Farfield PRim Sch Reevy")
+
+## Girlington
+
+plot_E <- street_diurnal_plot(street_term_time_2, "Girlington St Leonards Road", "Girlington St Leonards Road")
+
+## "Gt Horton All Saints Primary School"
+
+plot_F <- street_diurnal_plot(street_term_time_2, "Gt Horton All Saints Primary School", "Gt Horton All Saints Primary School")
+
+## "Horton Aberdeen Place"
+
+plot_G <- street_diurnal_plot(street_term_time_2, "Horton Aberdeen Place", "Horton Aberdeen Place")
+
+## "Ilkley Grove Road"
+
+plot_H <- street_diurnal_plot(street_term_time_2, "Ilkley Grove Road", "Ilkley Grove Road")
+
+## "Keighley"
+
+plot_I <- street_diurnal_plot(street_term_time_2, "Keighley", "Keighley")
+
+## "Low Moor First" 
+
+plot_J <- street_diurnal_plot(street_term_time_2, "Low Moor First", "Low Moor First")
+
+## "Saltaire Titus" 
+
+plot_K <- street_diurnal_plot(street_term_time_2, "Saltaire Titus", "Saltaire Titus")
+
+## "Silsden Hothfield" 
+
+plot_L <- street_diurnal_plot(street_term_time_2, "Silsden Hothfield", "Silsden Hothfield")
+
+grid.arrange(plot_A, plot_B, plot_C, plot_D, plot_E, plot_F, plot_G, plot_H, plot_I, plot_J, plot_K, plot_L, ncol = 2)
+```
+
+```{r, fig.width=25, fig.height=35}
+
+############### OR, using facet wrap within ggplot to arrange the plots
+
+ggplot(street_term_time_2) +
+  geom_line(aes(x = Hour, y = `Mean of pollutants`, color = Pollutants, group = Pollutants), linetype = "dashed", size = 0.8, alpha = 15) +
+  labs(title = "Average Diurnal Profile of Pollutant Concentration", x = "Time of Day", y = "Mean NO Concentration") +
+  facet_wrap(~ `School street`, nrow = 4) +
+  scale_color_manual(values = c("orange", "blue", "red", "brown", "purple", "green")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.1, hjust = 0.1, size = 13), axis.text.y = element_text(size = 20), axis.title = element_text(size = 15), plot.title = element_text(size = 20), legend.text = element_text(size = 30), legend.title = element_text(size = 30), strip.text = element_text(size = 18), panel.grid.major = element_line(size = 1.5)) +
+   guides(color = guide_legend(override.aes = list(size = 25)))
+
+```
+
+From the graphs above, there is not a distinct drop in air pollutants for any of the diurnal profiles  during the first term time of the three months period of the survey so far.  
+
+It should be noted that the morning road closures typically coincide with the peak traffic period, while the afternoon closures do not, occurring well before 5pm. As a result, it would be reasonable to expect the afternoon road closures to have less effect on pollutant concentrations than those in the morning.
+
+## Average Diurnal Profiles of Pollutants at Each School Site Throughout the Three-Month Period
+
+This analysis explores the average diurnal profiles of pollutants observed during the entire three-month duration of the school street intervention.
+
+
+```{r, fig.width=25, fig.height=35}
+
+# Here I am going to separate the hour column into two columns retaining only the column with the hour
+
+street_entire_period <- street_all_sites_3 %>%
+  separate(Hour, into = c("Hour", "Minutes"), sep = ":")
+
+# Removing the minutes column 
+
+street_entire_period <- subset(street_entire_period, select = -Minutes)
+
+# There are missing values under hour that need to be converted to hour 23
+
+street_entire_period$Hour[is.na(street_entire_period$Hour)] <- 23
+
+# Group data by school and timestamp, calculate mean pollutant concentration
+
+street_entire_period_2 <- street_entire_period %>%
+  group_by(`School street`, Hour) %>%
+  summarise(
+    Mean_NO = mean(NO, na.rm = TRUE),
+    Mean_NO2 = mean(`NO₂`, na.rm = TRUE),
+    Mean_O3 = mean(`O₃`, na.rm = TRUE),
+    Mean_PM1 = mean(PM1, na.rm = TRUE),
+    Mean_PM10 = mean(PM10, na.rm = TRUE),
+    Mean_PM2.5 = mean(PM2.5, na.rm = TRUE)
+  )
+View(street_entire_period_2)
+
+# Convert time to factor for proper ordering on x-axis
+
+street_entire_period_2$Hour <- factor(street_entire_period_2$Hour, levels = unique(street_entire_period_2$Hour))
+
+# Gathering all the mean pollutant in one column
+
+street_entire_period_2 <- street_entire_period_2 %>%
+  gather("Mean_NO",	"Mean_NO2",	"Mean_O3",	"Mean_PM1",	"Mean_PM10",	"Mean_PM2.5", key = "Pollutants", value = "Mean of pollutants")
+
+# Using ggplot to get the graph
+street_entire_period_2[street_entire_period_2$`School street` == "Farfield PRim Sch Reevy", ]
+ggplot(street_entire_period_2) +
+  geom_line(aes(x = Hour, y = `Mean of pollutants`, color = Pollutants, group = Pollutants), linetype = "dashed", size = 0.8, alpha = 15) +
+  labs(title = "Average Diurnal Profile of Pollutant Concentration", x = "Time of Day", y = "Mean NO Concentration") +
+  facet_wrap(~ `School street`, nrow = 4) +
+  scale_color_manual(values = c("orange", "blue", "red", "brown", "purple", "green")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.1, hjust = 0.1, size = 13), axis.text.y = element_text(size = 20), axis.title = element_text(size = 15), plot.title = element_text(size = 20), legend.text = element_text(size = 30), legend.title = element_text(size = 30), strip.text = element_text(size = 18), panel.grid.major = element_line(size = 1.5)) +
+   guides(color = guide_legend(override.aes = list(size = 25)))
+```
+
+# Spatial Distribution of the pollutants across the Wards
+
+Here, the spatial distribution will spatially show the location of each pollutant and their level of emmisison in each ward. The goal will be to 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

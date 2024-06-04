@@ -1,0 +1,26 @@
+{
+    "id": "138264C6",
+    "path": "~/Desktop/R language2/My projects/Air Quality Project/Dashboard_air_quality_zephyr/server.R",
+    "project_path": "Dashboard_air_quality_zephyr/server.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1714041238462.0,
+    "source_on_save": false,
+    "relative_order": 8,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "52,8",
+        "scrollLine": "49"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1717501293,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1717501293585,
+    "read_only": false,
+    "read_only_alternatives": []
+}
